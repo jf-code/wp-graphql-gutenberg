@@ -407,9 +407,9 @@ if (!class_exists('WPGraphQLGutenberg')) {
                 }
 
                 if (isset($type)) {
-                    if (isset($attribute['default'])) {
-                        $type = Type::nonNull($type);
-                    }
+                    // if (isset($attribute['default'])) {
+                    //     $type = Type::nonNull($type);
+                    // }
 
                     $fields[$attribute_name] = [
                         'type' => $type

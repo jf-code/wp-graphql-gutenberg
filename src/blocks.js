@@ -70,6 +70,17 @@ function isReusableBlockUpdateRequest(options) {
 	);
 }
 
+function isPreviewUpdateRequest(options) {
+	const restBase = getPostTypeRestBase();
+	console.log(restBase);
+	if (restBase) {
+		const regexp = new RegExp(`^\/wp\/v2\/${restBase}\/.*autosaves`);
+		return regexp.test(options.path) && options.method === "POST";
+	}
+
+	return false;
+}
+
 function shouldForceUpdate() {
 	return (
 		window.location.search
@@ -157,13 +168,17 @@ function prepareReusableBlocks(blocksById) {
 wp.domReady(() => {
 	const admin = document.getElementById("wp-graphql-gutenberg-admin");
 
+	console.log(wp);
+
 	if (admin) {
 		wp.element.render(<Admin />, admin);
 	} else {
 		const forceUpdate = shouldForceUpdate();
 
 		wp.apiFetch.use((options, next) => {
+			console.log(options);
 			if (isEditorUpdateRequest(options)) {
+				console.log("isEditorUpdateRequest");
 				if (options.data.content) {
 					const blocks = wp.blocks.parse(options.data.content);
 					return Promise.all([
@@ -185,12 +200,15 @@ wp.domReady(() => {
 							wp_graphql_gutenberg: data
 						});
 
+						console.log("FINAL DATA ON SAVE", options);
+
 						return next(options);
 					});
 				}
 			}
 
 			if (isReusableBlockUpdateRequest(options)) {
+				console.log("isReusableBlockUpdateRequest");
 				if (options.data.content) {
 					const [block] = wp.blocks.parse(options.data.content);
 
@@ -202,6 +220,43 @@ wp.domReady(() => {
 					});
 
 					return next(options);
+				}
+			}
+
+			if (isPreviewUpdateRequest(options)) {
+				console.log("isPreviewUpdateRequest");
+				if (options.data.content) {
+					const blocks = wp.blocks.parse(options.data.content);
+					return Promise.all([
+						preparePostContentBlocks(blocks),
+						forceUpdate && getReusableBlocks(blocks).then(prepareReusableBlocks)
+					]).then(([postContentBlocks, reusableBlocks]) => {
+						const data = {
+							block_types: getBlockTypesForSerialization(),
+							post_content_blocks: postContentBlocks
+						};
+
+						if (reusableBlocks) {
+							Object.assign(data, {
+								reusable_blocks: reusableBlocks
+							});
+						}
+
+						console.log("FINAL DATA", options);
+						const restBase = getPostTypeRestBase();
+
+						editorReady(post => {
+							wp.apiFetch({
+								path: `/wp/v2/${restBase}/${post.id}`,
+								method: "PUT",
+								data: {
+									wp_graphql_gutenberg_preview: data
+								}
+							});
+						});
+
+						return next(options);
+					});
 				}
 			}
 
